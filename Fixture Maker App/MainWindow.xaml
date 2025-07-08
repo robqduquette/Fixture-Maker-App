@@ -9,21 +9,64 @@
         Title="Fixture Maker" Height="450" Width="800">
     <DockPanel>
         <!-- Sidebar -->
-        <StackPanel DockPanel.Dock="Left" Width="189" Background="#EEE">
-            <!--- controls go here -->
-            <Label Content="Fixture Settings"/>
-
-            <CheckBox Content="Enable Baseplate"/>
-
+        <StackPanel DockPanel.Dock="Left" Width="220" Background="#EEE">
+            <!-- File Selection -->
+            <Label Content="File Selection" FontWeight="Bold" Margin="5"/>
             <Button Content="Load STL" Click="OnLoadStlClicked" Margin="5"/>
+            <Label x:Name="FileNameText" Content="No file loaded." Margin="5"/>
 
-            <Label x:Name="FileNameText" Content="No file loaded."/>
+            <!-- Object Positioning -->
+            <Label Content="Object Positioning" FontWeight="Bold" Margin="5,20,5,0"/>
+            <Grid Margin="10,0,10,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
 
+                <Label Content="Z Offset" Grid.Row="0" Grid.Column="0"/>
+                <TextBox Name="ZOffset" Text="10" Grid.Column="1" VerticalAlignment="Center" TextChanged="OnTransformChanged"/>
+
+                <Label Content="Rotation" Grid.Row="1" Grid.Column="0"/>
+                <TextBox Name="Rotation" Text="0" Grid.Column="1" Grid.Row="1" VerticalAlignment="Center" TextChanged="OnTransformChanged"/>
+            </Grid>
+
+            <!-- Fixture Settings -->
+            <Label Content="Fixture Settings" FontWeight="Bold" Margin="5,20,5,0"/>
+            <Grid Margin="10,0,10,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+                <Label Content="External Tolerance" Grid.Row="0" Grid.Column="0"/>
+                <TextBox Name="ExtTol" Text="0.1" Grid.Column="1" VerticalAlignment="Center"/>
+
+                <Label Content="Baseplate Type" Grid.Row="1" Grid.Column="0"/>
+                <ComboBox Name="BaseplateComboBox" Grid.Column="1" Grid.Row="1" SelectedIndex="0" VerticalAlignment="Center">
+                    <ComboBoxItem Content="None" />
+                    <ComboBoxItem Content="Baseplate 1"/>
+                </ComboBox>
+
+                <Label Content="Fixture Thickness" Grid.Row="2" Grid.Column="0"/>
+                <TextBox Name="FixtureThick" Text="3.0" Grid.Column="1" Grid.Row="2" VerticalAlignment="Center"/>
+            </Grid>
+
+            <!-- Generate Fixture -->
+            <Button Content="Generate Fixture" Click="OnGenerateFixtureClicked" Margin="10,20,10,0"/>
         </StackPanel>
 
+        <!-- 3D Viewport -->
         <h:HelixViewport3D Name="MainViewPort">
             <h:DefaultLights/>
         </h:HelixViewport3D>
-        
     </DockPanel>
 </Window>
