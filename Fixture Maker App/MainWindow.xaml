@@ -28,11 +28,10 @@
                 </Grid.RowDefinitions>
 
                 <Label Content="Z Offset" Grid.Row="0" Grid.Column="0"/>
-                <TextBox Name="ZOffset" Text="10" Grid.Column="1" VerticalAlignment="Center" TextChanged="OnTransformChanged"/>
+                <TextBox Name="ZOffsetBox" Text="10" Grid.Column="1" VerticalAlignment="Center" TextChanged="OnTransformChanged"/>
 
-                <Label Content="Rotation" Grid.Row="1" Grid.Column="0"/>
-                <TextBox Name="Rotation" Text="0" Grid.Column="1" Grid.Row="1" VerticalAlignment="Center" TextChanged="OnTransformChanged"/>
             </Grid>
+             <Button Content="Reset Rotation"  Click="OnResetRotationClicked" Margin="0,4,0,0"/>
 
             <!-- Fixture Settings -->
             <Label Content="Fixture Settings" FontWeight="Bold" Margin="5,20,5,0"/>
