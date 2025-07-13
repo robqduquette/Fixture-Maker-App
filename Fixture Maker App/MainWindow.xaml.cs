@@ -1,15 +1,21 @@
 ﻿using System;
+using System.IO;
+using System.Reflection;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Media3D;
 using HelixToolkit.Wpf;
+using Leap71.ShapeKernel;
 using Microsoft.Win32;
+using PicoGK;
+
+
 
 namespace Fixture_Maker_App
 {
-    public enum BaseplateType { None, Baseplate1 }
+    public enum BaseplateType { None, Baseplate }
 
     public partial class MainWindow : Window
     {
@@ -20,6 +26,7 @@ namespace Fixture_Maker_App
         private double _rotation = 0;
         private double _extTol = 0.1;
         private BaseplateType _baseplate = BaseplateType.None;
+        private ModelVisual3D _fixtureModel;
 
         private ModelVisual3D SceneRoot = new ModelVisual3D();
         private ModelVisual3D RingGroup = new ModelVisual3D();
@@ -63,7 +70,6 @@ namespace Fixture_Maker_App
             };
 
         }
-
         private void OnLoadStlClicked(object sender, RoutedEventArgs e)
         {
             var dlg = new OpenFileDialog { Filter = "STL Files (*.stl)|*.stl" };
@@ -74,7 +80,18 @@ namespace Fixture_Maker_App
             LoadStl(_filename);
             ApplyTransform();
         }
-
+        private MeshGeometry3D GetMeshGeometry(Model3DGroup group)
+        {
+            foreach (var child in group.Children)
+            {
+                if (child is GeometryModel3D geomModel)
+                {
+                    MeshGeometry3D mesh = (MeshGeometry3D)geomModel.Geometry;
+                    return mesh;
+                }
+            }
+            return new MeshGeometry3D();
+        }
         private void LoadStl(string filePath)
         {
             var reader = new StLReader();
@@ -88,17 +105,7 @@ namespace Fixture_Maker_App
             _centerTransform = new TranslateTransform3D(-centerOffset);
             model.Transform = _centerTransform;
 
-            if (model is Model3DGroup group)
-            {
-                foreach (var child in group.Children)
-                {
-                    if (child is GeometryModel3D geomModel)
-                    {
-                        _savedMesh = geomModel.Geometry as MeshGeometry3D;
-                        break;
-                    }
-                }
-            }
+            _savedMesh = GetMeshGeometry(model);
 
             _loadedModel = new ModelVisual3D { Content = model };
 
@@ -134,26 +141,22 @@ namespace Fixture_Maker_App
 
             MainViewPort.ZoomExtents();
         }
-
-        private void ApplyTransform()
+         private void ApplyTransform()
         {
             if (_loadedModel == null || _savedMesh == null) return;
             double bottomZ = ComputeBottomZ();
             zOffsetTransform.OffsetZ = _zOffset - bottomZ;
         }
-
         private void OnTransformChanged(object sender, TextChangedEventArgs e)
         {
             double.TryParse(ZOffsetBox.Text, out _zOffset);
             ApplyTransform();
         }
-
         private void OnResetRotationClicked(object sender, RoutedEventArgs e)
         {
             rotateTransformGroup.Children.Clear();
             ApplyTransform();
         }
-
         private void OnGenerateFixtureClicked(object sender, RoutedEventArgs e)
         {
             if (_filename == "")
@@ -162,13 +165,73 @@ namespace Fixture_Maker_App
                 return;
             }
 
+            MessageBox.Show("Fixture generation triggered (backend connection goes here).");
+
+
             double.TryParse(ExtTol.Text, out _extTol);
             double.TryParse(FixtureThick.Text, out double fixtureThick);
             _baseplate = (BaseplateType)BaseplateComboBox.SelectedIndex;
 
-            MessageBox.Show("Fixture generation triggered (backend connection goes here).");
-        }
+            // export the loaded and transformed model to STL for PicoGK upload
+            var exporter = new StlExporter();
+            using (var stream = File.Create("temp.stl"))
+            {
+                exporter.Export(_loadedModel, stream);
+            }
 
+            try
+            {
+                using PicoGK.Library oLibrary = new(0.5f);
+                {
+                    Mesh mesh = Mesh.mshFromStlFile("temp.stl");
+
+                    // generate the fixture objects
+                    Fixture.BasePlate oBasePlate = new Fixture.BasePlate();
+                    Fixture.Object oObject = new Fixture.Object(
+                        mesh,
+                        (float)_zOffset,
+                        10f,
+                        3f,
+                        5,
+                        3f
+                    );
+
+                    Fixture oFixture = new Fixture(oBasePlate, oObject);
+
+                    // save fixture to STL temporarily
+                    string tempPath = Path.Combine(Path.GetTempPath(), "temp_fixture.stl");
+                    oFixture.asVoxels().mshAsMesh().SaveToStlFile(tempPath);
+
+                    StLReader reader = new StLReader();
+                    Model3D model = reader.Read(tempPath);
+                    _fixtureModel = new ModelVisual3D { Content = model };
+
+                    //GeometryModel3D geoModel = new GeometryModel3D
+                    //{
+                    //    Geometry = _fixtureModel,
+                    //    Material = MaterialHelper.CreateMaterial(Brushes.Red)
+                    //};
+                    SceneRoot.Children.Clear();
+                    SceneRoot.Children.Add(_loadedModel);
+                    SceneRoot.Children.Add(_fixtureModel);
+
+                    // cleanup temp file
+                    if (File.Exists(tempPath))
+                            File.Delete(tempPath);
+                }
+                MessageBox.Show("Generated Fixture successfully.");
+
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(ex.ToString());
+                MessageBox.Show("Fixture generation failed.");
+
+            }
+
+
+
+        }
         private void MainViewPort_MouseDown(object sender, MouseButtonEventArgs e)
         {
             Point pos = e.GetPosition(MainViewPort);
@@ -190,7 +253,6 @@ namespace Fixture_Maker_App
             cumulativeRotationDegrees = 0;
             lastSnappedRotationDegrees = 0;
         }
-
         private void MainViewPort_MouseMove(object sender, MouseEventArgs e)
         {
             if (!rotating || _loadedModel == null) return;
@@ -223,20 +285,17 @@ namespace Fixture_Maker_App
             ApplyTransform();
             lastMousePos = currentPos;
         }
-
         private void MainViewPort_MouseUp(object sender, MouseButtonEventArgs e)
         {
             rotating = false;
             Mouse.Capture(null);
         }
-
         private void AddRotationHandles(double radius = 30, double thickness = 1)
         {
             XRing = CreateRing(radius, thickness, Brushes.Red, new Vector3D(1, 0, 0));
             YRing = CreateRing(radius, thickness, Brushes.Green, new Vector3D(0, 1, 0));
             ZRing = CreateRing(radius, thickness, Brushes.Blue, new Vector3D(0, 0, 1));
         }
-
         private ModelVisual3D CreateRing(double radius, double thickness, Brush color, Vector3D axis)
         {
             var builder = new MeshBuilder(true, false);
@@ -264,7 +323,6 @@ namespace Fixture_Maker_App
 
             return new ModelVisual3D { Content = model };
         }
-
         private ModelVisual3D CreateGroundPlane(double size)
         {
             var builder = new MeshBuilder();
@@ -290,7 +348,6 @@ namespace Fixture_Maker_App
                 }
             };
         }
-
         private double ComputeBottomZ()
         {
             if (_savedMesh == null) return 0;
@@ -302,7 +359,6 @@ namespace Fixture_Maker_App
 
             return minZ;
         }
-
         private Point ProjectToScreen(Point3D point)
         {
             Matrix3D matrix = GetTotalTransformMatrix(MainViewPort);
@@ -319,14 +375,12 @@ namespace Fixture_Maker_App
                 (x + 1) * 0.5 * MainViewPort.ActualWidth,
                 (-y + 1) * 0.5 * MainViewPort.ActualHeight);
         }
-
         private Matrix3D GetTotalTransformMatrix(HelixViewport3D viewport)
         {
             var vm = CameraHelper.GetViewMatrix(viewport.Camera);
             var pm = CameraHelper.GetProjectionMatrix(viewport.Camera, viewport.ActualWidth / viewport.ActualHeight);
             return vm * pm;
         }
-
         private Vector3D GetCameraViewDirection(Camera camera)
         {
             return camera is ProjectionCamera pc ? pc.LookDirection : new Vector3D(0, 0, -1);
